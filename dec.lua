@@ -4,6 +4,14 @@ local bit = require 'bit'
 local JSON = require'json'
 local lua_assert = function (x) assert (x ~= 0) end;
 
+
+local DEBUG = 1
+
+local function log(str)
+  if (DEBUG > 0) then print(str) end
+end
+
+
 local basic_types = 
 {
 	LUA_TNONE 			= -1,
@@ -30,7 +38,6 @@ local function dump(str)
 	return t
 end
 
-local header_magic = "\x1bLua";
 local header_tail = "\x19\x93\r\n\x1a\n";
 
 local header = {};
@@ -40,15 +47,15 @@ local function error(S, msg)
 end
 
 local function LoadIns(S)
-	return struct.unpack(S.header.endianess .. "I4", S.reader:read(4))
+	return struct.unpack(S.header.endianess .. "I" .. tostring(S.header.inst_size), S.reader:read(S.header.inst_size))
 end
 
 local function LoadSizet(S)
-	return struct.unpack(S.header.endianess .. "I4", S.reader:read(4))
+	return struct.unpack(S.header.endianess .. "I" .. tostring(S.header.sizet_size), S.reader:read(S.header.sizet_size))
 end
 
-local function LoadInt(s)
-	return struct.unpack(s.header.endianess .. "i4", s.reader:read(4))
+local function LoadInt(S)
+	return struct.unpack(S.header.endianess .. "i" .. tostring(S.header.int_size), S.reader:read(S.header.int_size))
 end
 
 local function LoadByte(s)
@@ -64,9 +71,7 @@ local function LoadBool(s)
 end
 
 local function LoadNumber(s)
---      print ("LoadNumber: size=" .. tostring(s.header.luan_size) .. ", from:" .. tostring(s.reader:seek()) .. ":")
       local n = s.reader:read(s.header.luan_size)
---      print (dump(n))
       return struct.unpack(s.header.endianess .. "d", n)
 end
 
@@ -86,7 +91,6 @@ local function LoadVector(S,n,size)  return LoadMem(S,n,size) end
 local function LoadCode(S, f)
  local n=LoadInt(S);
  f.sizecode=n;
--- print (S,n,S.header.inst_size)
  f.code = LoadVector(S,n,S.header.inst_size);
 -- print ("LoadCod, from:"  .. tostring(S.reader:seek()) .. ", size: " .. tostring(f.sizecode))
 -- print ("LoadCode:\n" .. dump(f.code) .. "\n")
@@ -120,8 +124,7 @@ end
 
 local function LoadConstants(S, f)
  local i,n;
- n = LoadSizet(S);
--- print ("LoadConstants, n=" .. tostring(n));
+ n = LoadInt(S);
  f.k=luaM_newvector(S.L,n);
  f.sizek=n;
  for i=1, n do  f.k[i] = nil end
@@ -153,7 +156,7 @@ local function LoadConstants(S, f)
  end
 end
 
-local function LoadUpvalues(S, f)
+local function LoadUpvalues(S, f)      
 	local i,n;
 	n=LoadInt(S);
 	f.upvalues=luaM_newvector(S.L,n);
@@ -186,8 +189,20 @@ local function LoadDebug(S, f)
 end
 
 LoadFunction = function(S)
+	log ('LoadFunction')
 	local cl = {}
 	local f = {}
+	f.tostring = function (self)
+		   local str = '{linedefined=' .. tonumber(self.linedefined) .. 
+		   	       ', lastlinedefined=' .. tonumber(self.lastlinedefined) .. 
+			       ', numparams=' .. tostring(self.numparams) .. 
+			       ', is_vararg=' .. (self.is_vararg == 1 and 'Yes' or 'No') .. 
+			       ', maxstacksize=' .. tostring(self.maxstacksize) .. 
+			       ', sizecode=' .. tostring(self.sizecode) .. 
+			       ', sizek=' .. tostring(self.sizek) .. 
+			       ', sizeupvalues=' .. tostring(self.sizeupvalues) .. '}'
+		   return str
+	end
 	f.linedefined=LoadInt(S);
 	f.lastlinedefined=LoadInt(S);
 	f.numparams=LoadByte(S);
@@ -197,49 +212,66 @@ LoadFunction = function(S)
 	LoadConstants(S,f);
 	LoadUpvalues(S,f);
 	LoadDebug(S,f);
+	log (f:tostring())
 	cl.f = f;
 	return cl;
 end
 
 
 local function parseInstruction(ins)
---      print ("parseInstruction:" .. string.format("%08X", ins))
 	return ops(ins)
 end
 
-local function parseCode(S, c)
+local function parseCode(S, cl)
 	local instructions = {}
-	for i=0, (((#c)/4) - 1) do
-		local ins = struct.unpack(S.header.endianess .. 'I4', c:sub((4*i) +1, (4*i) + 5));
+	for i=0, (((#cl.f.code)/S.header.inst_size) - 1) do
+		local ins = struct.unpack(S.header.endianess .. 'I' .. tostring(S.header.inst_size), 
+		      	    		cl.f.code:sub((S.header.inst_size*i) +1, (S.header.inst_size*(i+1)) + 1));
 --		print ("op: " .. tostring(bit.band(ins, 0x3F)))
 --		print (string.format("%X", ins))
 		local op = parseInstruction(ins)
---		print (op:tostring())
+--		print (op:tostring(cl))
 		table.insert(instructions, op);
 	end
 	return instructions;
 end
 
 local function LoadHeader(reader)
+	header_magic = "\x1bLua";
 	local header = {}
 	header.magic = reader:read(#header_magic);
-	header.version = reader:read(1);
-	header.format 	  = reader:read(1);
+	header.version = struct.unpack("B", reader:read(1));
+	header.format 	  = struct.unpack("B", reader:read(1));
 	if (reader:read(1) == "\x00") then header.endianess = ">" else header.endianess =  "<" end
 	header.int_size   = struct.unpack("B", reader:read(1));
 	header.sizet_size = struct.unpack("B", reader:read(1));
 	header.inst_size  = struct.unpack("B", reader:read(1));
 	header.luan_size  = struct.unpack("B", reader:read(1));
-	header.is_luan    = reader:read(1);
+	header.is_luan    = struct.unpack("B", reader:read(1));
 	header.tail		  = reader:read(#header_tail);
+	header.tostring = 
+		function (self)
+			local str = 'Header={' ..
+					'version=' .. string.format("%X", self.version) ..
+					', format=' .. string.format("%X", self.format) ..
+					', endianess=' .. (self.endianess == '>' and  'Big' or 'Little') ..
+					', integer-size=' .. string.format("%u", self.int_size) ..
+					', size_t=' .. string.format("%u", self.sizet_size) ..
+					', instruction-size=' .. string.format("%u", self.inst_size) ..
+					', luan-size=' .. string.format("%u", self.luan_size) ..
+					', is-luan=' .. (self.is_luan == 1 and 'Yes' or 'No') ..
+					'}'
+			return str
+		end
 	return header
 end
 
 local function dumpTo(S, writer, cl, pref)
 	writer:write(pref, "Source: " .. cl.f.source .. "\n");
-	writer:write(pref, "numparams: " .. tostring(cl.f.numparams) ..
-			 ", is_vararg:" .. tostring(cl.f.is_vararg) ..
-			 ", maxstacksize:" .. tostring(cl.f.maxstacksize) .. "\n");
+	writer:write(pref, cl.f:tostring() .. "\n"); 
+			  -- "numparams: " .. tostring(cl.f.numparams) ..
+			 -- ", is_vararg:" .. tostring(cl.f.is_vararg) ..
+			 -- ", maxstacksize:" .. tostring(cl.f.maxstacksize) .. "\n");
 
 	writer:write(pref, "Local vars(" .. tostring(cl.f.sizelocvars) .. "):\n");
 	for i=1,cl.f.sizelocvars do
@@ -252,7 +284,7 @@ local function dumpTo(S, writer, cl, pref)
 		writer:write(pref, " " .. JSON.encode(cl.f.k[i]) .. '\n');
 	end
 	
-	local instructions = parseCode(S, cl.f.code);
+	local instructions = parseCode(S, cl);
 	writer:write(pref, "Code (" .. tostring(#instructions) .. "):\n");
 	for i=1, #instructions do
 		writer:write(pref, " " .. instructions[i]:tostring(cl) .. '\n');
@@ -265,15 +297,23 @@ local function dumpTo(S, writer, cl, pref)
 
 end
 
-
-local input = io.open(arg[1], "rb");
-
+local input = {}
+input._input = io.open(arg[1], "rb");
+input._read = 0;
+input_defaults = {__index = function(t, k) return t._input.k end}
+setmetatable(input, input_defaults)
+input.read = function(self, size)
+--	   print ('location:' .. tostring(self._read) .. ', reading:' .. tostring(size))
+	   self._read = self._read + size
+	   return self._input:read(size)
+	   end
+input.close = function(self)return self._input:close() end
 
 local header = LoadHeader(input)
+print (header:tostring())
 local S = {reader = input, header = header, L = {}}
 
 local main = LoadFunction(S)
---print ("instruction size:", header.inst_size)
 --print (string.format("%X", main.f.linedefined), string.format("%X", main.f.lastlinedefined));
 --print (dump(main.f.code))
 --parseCode(S, main.f.code);
@@ -289,4 +329,8 @@ local dumbWriter =
 };
 
 dumpTo(S, dumbWriter, main, "__function[0]")
+
+
+
+
 
