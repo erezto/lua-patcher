@@ -1,0 +1,130 @@
+<html>
+	<head>
+		<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.3/jquery.min.js"></script>
+		<!-- Latest compiled and minified CSS -->
+		<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap.min.css">
+		<!-- Optional theme -->
+		<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap-theme.min.css">
+		<!-- Latest compiled and minified JavaScript -->
+		<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/js/bootstrap.min.js"></script>	
+		<script type="text/javascript" src="js/lua_opcodes.js"></script>
+		<script type="text/javascript" src="js/BinaryParser.js"></script>
+		<script src="js/view_pattern_lib.js"></script>
+		<script src="js/code_view.js"></script>
+		<script src="js/FileSaver.js"></script>
+	
+		
+		<link rel="stylesheet" href="css/main.css">
+		<script>
+			function collapsableTemplate(id, parent_id, inner, title) {
+				if (typeof title == 'undefined'){title = id;}
+				return  '<div class="accordion-group hierarchical_child"><div class="accordion-heading">' + 
+				'<a class="accordion-toggle" data-toggle="collapse" data-parent="#' + parent_id + '" href="#' + id + '">' + title + '</a>' +
+				'</div><div id="' + id + '" class="accordion-body collapse" style="height: auto;">' +
+				'<div class="accordion-inner">' +inner + '</div></div></div>';				
+			}
+			var code_list = [];
+			function AddFunction(f, id, parent_id, title) {
+				if (typeof title == 'undefined'){title = id;}
+				inner = '<div id="' + id + '_inner">' + 
+				'<div class="hierarchical_child">params: ' + f.num_params + ', is_vararg: ' + f.is_vararg + '</div>' + 
+				'<div id="' + id + '_inner_code"></div>'  + 
+				collapsableTemplate( id + '_inner_constants', id, '', 'Constants') + 
+				collapsableTemplate( id + '_inner_closures', id, '', 'Closures') + 
+				'</div>';
+				var  elem = collapsableTemplate(id, parent_id, inner, title);
+				$('#' + parent_id).append(elem);
+				var code = '';
+				for (var i=0; i<f.code_length; i++) {
+					var BE = new DataBE(f.GetInstrution(i));
+					code_list.push(BE);
+					$('#'  + id + '_inner_code').append('<div id="' + id + '_inner_code' + i + '"></div>');
+					new HexView(BE, $('#'  + id + '_inner_code' + i ),  id + '_inner_code' + i + '_0');
+					new ParsedView(BE, $('#'  + id + '_inner_code' + i ),  id + '_inner_code' + i +  '_1');
+					new ArrayListeneer(BE, f, i);
+				}
+				
+				for (var i=0; i< f.closures.length; i++) {
+					AddFunction(f.closures[i], id + '_' + i, id);
+				}
+				
+				for (var i=0; i< f.constants.length; i++) {
+					$('#'  + id + '_inner_constants').append('<div class="hierarchical_child">' + i + ": " + f.constants[i] + '</div>');
+				}
+			}
+			var file;
+			var main;
+			function readSingleFile(evt) {
+				//Retrieve the first (and only!) File from the FileList object
+				var f = evt.target.files[0]; 
+				file =f ;
+				if (f) {
+					var r = new FileReader();
+					r.onload = function(e) { 
+						var contents = e.target.result;
+						var code_array = new Uint8Array(contents);
+						var header = GetHeader(code_array);
+						var reader = new Reader(code_array, 18);
+						main = new LuaFunction(reader, header);
+						for (var i=0; i<main.code_length; i++) {
+							ParseInstruction(main.GetInstrution(i));
+						}
+						AddFunction(main, 'function_0', 'closures', 'main');
+						//				ParseInstruction(code_array.subarray(33,37));
+					}
+					r.readAsArrayBuffer (f);
+				} else { 
+					alert("Failed to load file");
+				}
+			}
+			function data2blob(data,isBase64) {
+			   var chars="";
+			   if (isBase64) chars=atob(data); else chars=data;
+			   var bytes=new Array(chars.length);
+			   for (var i=0;i<chars.length; i++) bytes[i]=chars.charCodeAt(i);
+			   var blob=new Blob([new Uint8Array(bytes)]);
+			   return blob;
+			}
+			function SaveToFile() {
+//							saveAs( data2blob(code_array), "myString.txt" );
+				saveAs( new Blob([new Uint8Array(main.arr)]), file.name );
+			}
+			
+		</script>
+	</head>
+	<body>
+		<header style="margin-top: 15px;">
+		<nav class="navbar navbar-default container" style='margin-right: 15px;  margin-left: 15px;  padding-left: 15px;  padding-right: 15px;'>
+				<div class="col-md-2">	</div>			
+				<div class="navbar-header col-md-2">			
+					<button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar" aria-expanded="false" aria-controls="navbar">
+						<span class="sr-only">Toggle navigation</span>
+						<span class="icon-bar"></span>
+						<span class="icon-bar"></span>
+						<span class="icon-bar"></span>
+					</button>
+					<a class="navbar-brand" href="#">Lua patcher</a>
+				</div>
+				<div class="col-md-5">	</div>		
+				<div id="navbar" class="collapse navbar-collapse col-md-3">
+					<ul class="nav navbar-nav">
+						<li><a href="lua_reader.html">Home</a></li>
+						<li><a href="about.html">About</a></li>
+						<li class="active"><a href="contact.html">Contact</a></li>
+					</ul>
+				</div><!--/.nav-collapse -->
+		</nav>
+		</header>
+		<div class="container" style="padding: 10px;">
+		<div class="row">
+
+
+		</div>
+		</div>
+		<footer class="footer">
+			<div class="container">
+			<p class="text-muted">Place sticky footer content here.</p>
+			</div>
+		</footer>
+	</body>
+</html>
