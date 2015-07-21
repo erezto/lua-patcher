@@ -1,0 +1,55 @@
+
+/* Sticky footer styles
+-------------------------------------------------- */
+html {
+position: relative;
+min-height: 100%;
+}
+body {
+/* Margin bottom by footer height */
+margin-bottom: 60px;
+}
+
+.footer {
+position: absolute;
+bottom: 0;
+width: 100%;
+/* Set the fixed height of the footer here */
+height: 60px;
+background-color: #f5f5f5;
+}
+
+
+/* Custom page CSS
+-------------------------------------------------- */
+/* Not required for template or sticky footer method. */
+
+.container {
+width: auto;
+}
+.container .text-muted {
+margin: 20px 0;
+}
+
+.hierarchical_child{
+margin-left: 15px;
+}
+
+.unactive-tab {
+	visibility: hidden;
+}
+
+.custome-tab {
+	position: absolute;
+	padding: 20px;
+    left: 0px;
+    top: 0px;
+    right: 0px;
+    bottom: 0px;	
+	height:100%;
+}
+
+.container-fluid .row {
+    margin-left: 0px;
+    margin-right: 0px;
+}
