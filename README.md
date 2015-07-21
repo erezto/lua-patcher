@@ -1,2 +1,2 @@
-# lua-dis
-Lua disassembler
+# Lua-Patcher
+Lua bytecode patching tool
