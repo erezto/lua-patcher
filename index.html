@@ -18,10 +18,22 @@
 		<script>
 			function collapsableTemplate(id, parent_id, inner, title) {
 				if (typeof title == 'undefined'){title = id;}
-				return  '<div class="accordion-group hierarchical_child"><div class="accordion-heading">' + 
-				'<a class="accordion-toggle" data-toggle="collapse" data-parent="#' + parent_id + '" href="#' + id + '">' + title + '</a>' +
-				'</div><div id="' + id + '" class="accordion-body collapse" style="height: auto;">' +
-				'<div class="accordion-inner">' +inner + '</div></div></div>';				
+
+				return  '<div class="panel panel-default">' +
+							'	<div class="panel-heading" id="' + id  + '_label">' +
+							'		<h4 class="panel-title">' +
+							'			<a role="button" data-toggle="collapse" data-parent="#' + parent_id + '" href="#' + id + '" aria-expanded="false" aria-controls="' + id + '">' +
+							title + 
+							'			</a>' + 
+							'		</h4>' +
+							'	</div>' + 
+							'	<div id="' + id + '" class="panel-collapse collapse" aria-labelledby="' + id  + '_label">' +
+							'		<div class="panel-body">' +
+							inner + 
+							'		</div>' +
+							'	</div>' +
+							'</div>';
+							
 			}
 			var code_list = [];
 			function AddFunction(f, id, parent_id, title) {
@@ -29,10 +41,12 @@
 				inner = '<div id="' + id + '_inner">' + 
 				'<div class="hierarchical_child">params: ' + f.num_params + ', is_vararg: ' + f.is_vararg + '</div>' + 
 				'<div id="' + id + '_inner_code"></div>'  + 
+				'<div class="panel-group" role="tablist" aria-multiselectable="false">' +
 				collapsableTemplate( id + '_inner_constants', id, '', 'Constants') + 
+				'</div>' + 
 				'</div>';
 				var  elem = collapsableTemplate(id, parent_id, inner, title);
-				$('#' + parent_id).append(elem);
+				$('#' + parent_id).append('<div class="panel hierarchical_child">' + elem + '</div>');
 				for (var i=0; i<f.code_length; i++) {
 					var BE = new DataBE(f.GetInstrution(i));
 					code_list.push(BE);
@@ -151,7 +165,7 @@
 								</nav>	
 								</div>
 							<div class="panel-body">
-									<div class="accordion" id="closures" style="height: 85%; overflow-y:auto; overflow-x:auto;"></div>
+									<div class="panel-group" id="closures" style="height: 85%; overflow-y:auto; overflow-x:auto;" role="tablist" aria-multiselectable="false"></div>
 							</div>
 						</div>
 					</div>
