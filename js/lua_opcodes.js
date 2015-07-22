@@ -65,7 +65,7 @@ function GetHeader(arr) {
 }
 
 function LuaFunction(reader, header) {
-	console.log('LuaFunction, reader.offset=' + reader.offset);
+	//console.log('LuaFunction, reader.offset=' + reader.offset);
 	var parser = new BinaryParser;
 	this.arr = reader.arr;
 	this.base = reader.offset;
@@ -207,10 +207,21 @@ function ParseABxInstruction(bytes) {
 	return parsed;
 }
 
+function ParseAsBxInstruction(bytes) {
+	var  parsed = {};
+	parsed.OP=bytes[0] & 0x3F;
+	parsed.A = ((bytes[0] & 0xC0)>>6) + ((bytes[1] & 0x3F)<<2);
+	parsed.sBx = ((bytes[1] & 0xC0)>>6) + (bytes[2]<<2) + (bytes[3] <<10);
+	parsed.sBx -= 0xFFFF;
+	parsed.ToString = function() {return "A:" + parsed.A + ", sBx:" + parsed.sBx;};
+	return parsed;
+}
+
+
 function ParseAxInstruction(bytes) {
 	var  parsed = {};
 	parsed.OP=bytes[0] & 0x3F;
-	parsed.Ax = ((bytes[0] & 0xC0)>>6) + (bytes[1] <<2) + bytes[2] <<10) + bytes[3] <<18);
+	parsed.Ax = ((bytes[0] & 0xC0)>>6) + (bytes[1] <<2) + (bytes[2] <<10) + (bytes[3] <<18);
 	parsed.ToString = function() {return "Ax:" + parsed.Ax;};
 	return parsed;
 }
@@ -284,7 +295,7 @@ function GetInstructionParser(bytes) {
 		case 22:	//OP_CONCAT
 			return ParseABCInstruction(bytes);
 		case 23:	//OP_JMP
-			return ParseUnknownInstruction(bytes);
+			return ParseAsBxInstruction(bytes);
 		case 24:	//OP_EQ
 			return ParseABCInstruction(bytes);
 		case 25:	//OP_LT
@@ -292,7 +303,7 @@ function GetInstructionParser(bytes) {
 		case 26:	//OP_LE
 			return ParseABCInstruction(bytes);
 		case 27:	//OP_TEST
-			return ParseUnknownInstruction(bytes);
+			return ParseAsBxInstruction(bytes);
 		case 28:	//OP_TESTSET
 			return ParseABCInstruction(bytes);
 		case 29:	//OP_CALL
@@ -302,13 +313,13 @@ function GetInstructionParser(bytes) {
 		case 31:	//OP_RETURN
 			return ParseABInstruction(bytes);
 		case 32:	//OP_FORLOOP
-			return ParseUnknownInstruction(bytes);
+			return ParseAsBxInstruction(bytes);
 		case 33:	//OP_FORPREP
-			return ParseUnknownInstruction(bytes);
+			return ParseAsBxInstruction(bytes);
 		case 34:	//OP_TFORCALL
-			return ParseUnknownInstruction(bytes);
+			return ParseABCInstruction(bytes);
 		case 35:	//OP_TFORLOOP
-			return ParseUnknownInstruction(bytes);
+			return ParseAsBxInstruction(bytes);
 		case 36:	//OP_SETLIST
 			var t = ParseABCInstruction(bytes);
 			if (t.c == 0) t = ParseAxInstruction(bytes);
@@ -318,7 +329,7 @@ function GetInstructionParser(bytes) {
 		case 38:	//OP_VARARG
 			return ParseABInstruction(bytes);
 		case 38:	//OP_EXTRAARG
-			return ParseUnknownInstruction(bytes);			
+			return ParseAxInstruction(bytes);			
 		}
 		return ParseUnknownInstruction(bytes);
 }
