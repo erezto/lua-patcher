@@ -198,6 +198,15 @@ function ParseABInstruction(bytes) {
 	return parsed;
 }
 
+function ParseACInstruction(bytes) {
+	var  parsed = {}
+	parsed.OP=bytes[0] & 0x3F;
+	parsed.A = ((bytes[0] & 0xC0)>>6) + ((bytes[1] & 0x3F)<<2);
+	parsed.C = ((bytes[1] & 0xC0)>>6) + ((bytes[2] & 0x7F)<<2);
+	parsed.ToString = function() {return "A:" + parsed.A + ", C:" + parsed.C;};
+	return parsed;
+}
+
 
 function ParseABxInstruction(bytes) {
 	var  parsed = {};
@@ -213,7 +222,7 @@ function ParseAsBxInstruction(bytes) {
 	parsed.OP=bytes[0] & 0x3F;
 	parsed.A = ((bytes[0] & 0xC0)>>6) + ((bytes[1] & 0x3F)<<2);
 	parsed.sBx = ((bytes[1] & 0xC0)>>6) + (bytes[2]<<2) + (bytes[3] <<10);
-	parsed.sBx -= 0xFFFF;
+	parsed.sBx -= 0x1FFFF;
 	parsed.ToString = function() {return "A:" + parsed.A + ", sBx:" + parsed.sBx;};
 	return parsed;
 }
@@ -255,7 +264,7 @@ function GetInstructionParser(bytes) {
 		case 1:	//OP_LOADK
 			return ParseABxInstruction(bytes);
 		case 2:	//OP_LOADKX
-			return ParseABxInstruction(bytes);
+			return ParseAInstruction(bytes);
 		case 3:	//OP_LOADBOOL
 			return ParseABCInstruction(bytes);
 		case 4:	//OP_LOADNIL
@@ -305,7 +314,7 @@ function GetInstructionParser(bytes) {
 		case 26:	//OP_LE
 			return ParseABCInstruction(bytes);
 		case 27:	//OP_TEST
-			return ParseAsBxInstruction(bytes);
+			return ParseACInstruction(bytes);
 		case 28:	//OP_TESTSET
 			return ParseABCInstruction(bytes);
 		case 29:	//OP_CALL
@@ -319,7 +328,7 @@ function GetInstructionParser(bytes) {
 		case 33:	//OP_FORPREP
 			return ParseAsBxInstruction(bytes);
 		case 34:	//OP_TFORCALL
-			return ParseABCInstruction(bytes);
+			return ParseACInstruction(bytes);
 		case 35:	//OP_TFORLOOP
 			return ParseAsBxInstruction(bytes);
 		case 36:	//OP_SETLIST
