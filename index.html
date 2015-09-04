@@ -8,10 +8,11 @@
 		<!-- Latest compiled and minified JavaScript -->
 		<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/js/bootstrap.min.js"></script>	
 		<script type="text/javascript" src="js/lua_opcodes.js"></script>
+		<script type="text/javascript" src="js/lua_common.js"></script>
 		<script type="text/javascript" src="js/BinaryParser.js"></script>
-		<script src="js/view_pattern_lib.js"></script>
-		<script src="js/code_view.js"></script>
-		<script src="js/FileSaver.js"></script>
+		<script type="text/javascript" src="js/view_pattern_lib.js"></script>
+		<script type="text/javascript" src="js/code_view.js"></script>
+		<script type="text/javascript" src="js/FileSaver.js"></script>
 	
 		
 		<link rel="stylesheet" href="css/main.css">
@@ -39,16 +40,16 @@
 			function AddFunction(f, id, parent_id, title) {
 				if (typeof title == 'undefined'){title = id;}
 				inner = '<div id="' + id + '_inner">' + 
-				'<div class="hierarchical_child">params: ' + f.num_params + ', is_vararg: ' + f.is_vararg + '</div>' + 
-				'<div id="' + id + '_inner_code"></div>'  + 
+				collapsableTemplate( id + '_inner_code', id, '', 'Code') + 				
 				'<div class="panel-group" role="tablist" aria-multiselectable="false">' +
 				collapsableTemplate( id + '_inner_constants', id, '', 'Constants') + 
 				'</div>' + 
 				'</div>';
-				var  elem = collapsableTemplate(id, parent_id, inner, title);
+				var title_ex = title + ': params: ' + f.num_params + ', is_vararg: ' + f.is_vararg + ', stack size: ' + f.stack_size;
+				var  elem = collapsableTemplate(id, parent_id, inner, title_ex);
 				$('#' + parent_id).append('<div class="panel hierarchical_child">' + elem + '</div>');
 				for (var i=0; i<f.code_length; i++) {
-					var BE = new DataBE(f.GetInstrution(i));
+					var BE = new DataBE(f.GetRawInstrution(i));
 					code_list.push(BE);
 					$('#'  + id + '_inner_code').append('<div id="' + id + '_inner_code' + i + '"></div>');
 					new HexView(BE, $('#'  + id + '_inner_code' + i ),  id + '_inner_code' + i + '_0', "");
@@ -75,14 +76,8 @@
 					r.onload = function(e) { 
 						var contents = e.target.result;
 						var code_array = new Uint8Array(contents);
-						var header = GetHeader(code_array);
-						var reader = new Reader(code_array, 18);
-						main = new LuaFunction(reader, header);
-						for (var i=0; i<main.code_length; i++) {
-							ParseInstruction(main.GetInstrution(i));
-						}
+						main = ParseBytecode(code_array).main;
 						AddFunction(main, 'function_0', 'closures', 'main');
-						//				ParseInstruction(code_array.subarray(33,37));
 					}
 					r.readAsArrayBuffer (f);
 				} else { 

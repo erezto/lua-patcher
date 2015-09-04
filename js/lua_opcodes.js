@@ -1,25 +1,3 @@
-function Reader(arr, offset) {
-	this.arr = arr;
-	this.offset = offset;
-}
-
-Reader.prototype.Read = function (size, count) {
-	var res;
-	var from = this.offset; var to = from + (count*size);
-	switch(size) {
-		case 1:
-			res = new Uint8Array(this.arr.subarray(from, to));
-			this.offset = to;
-			break;
-		case 4:
-			res = new Uint32Array(this.arr.subarray(from, to));
-			this.offset = to;
-			break;
-		default:
-			console.error('Canot read size ' + size);
-	}
-	return res;
-}
 
 function reverseEndianess(arr, offset) {
 	for (i=0, k=(arr.length+offset -1); i<k; i++, k--) {
@@ -49,23 +27,38 @@ function _writeInstruction(arr, offset, val, header) {
 		}	
 }
 
-function GetHeader(arr) {
-			var header = {};
-			header.magic =String.fromCharCode(arr[0]) + String.fromCharCode(arr[1])  + String.fromCharCode(arr[2]) + String.fromCharCode(arr[3]) ;
-			header.version = arr[4];
-			header.format = arr[5];
-			header.endianess =  arr[6];
-			header.int_size =  arr[7];
-			header.sizet_size =  arr[8];
-			header.inst_size =  arr[9];
-			header.luan_size =  arr[10];
-			header.is_luan =  arr[11];
-			header.tail =  arr.subarray(11, 18);					
-			return header;
+function ParseBytecode(arr) {
+	var header = {};
+	header.magic =String.fromCharCode(arr[0]) + String.fromCharCode(arr[1])  + String.fromCharCode(arr[2]) + String.fromCharCode(arr[3]) ;
+	header.version = arr[4];
+	console.log('version: ' + arr[4]);
+	if (header.version == 82) {//version is 82 in hex --> 0x52
+		return new Lua52(arr);
+	}
+	
+	console.log('Unknown version ' + parseInt(header.version , 16));
 }
 
-function LuaFunction(reader, header) {
-	//console.log('LuaFunction, reader.offset=' + reader.offset);
+function Lua52(arr) {	
+	this.arr = arr;
+	var header = {};
+	header.magic =String.fromCharCode(arr[0]) + String.fromCharCode(arr[1])  + String.fromCharCode(arr[2]) + String.fromCharCode(arr[3]) ;
+	header.version = arr[4];
+	header.format = arr[5];
+	header.endianess =  arr[6];
+	header.int_size =  arr[7];
+	header.sizet_size =  arr[8];
+	header.inst_size =  arr[9];
+	header.luan_size =  arr[10];
+	header.is_luan =  arr[11];
+	header.tail =  arr.subarray(11, 18);				
+	this.header = header;
+	var reader = new Reader(arr, 18);
+	this.main = new LuaFunction52(reader, header);
+}
+
+function LuaFunction52(reader, header) {
+	//console.log('LuaFunction52, reader.offset=' + reader.offset);
 	var parser = new BinaryParser;
 	this.arr = reader.arr;
 	this.base = reader.offset;
@@ -112,7 +105,7 @@ function LuaFunction(reader, header) {
 	this.closures = [];
 	var t = reader.Read(4, 1)[0];
 	for (var i=0; i<t; i++) {
-		this.closures[i] = new LuaFunction(reader, header);
+		this.closures[i] = new LuaFunction52(reader, header);
 	}
 	t= reader.Read(4, 1)[0];
 	this.upvalues = [];
@@ -149,12 +142,12 @@ function LuaFunction(reader, header) {
 	
 }
 
-LuaFunction.prototype.GetInstrution = function (i) {
+LuaFunction52.prototype.GetRawInstrution = function (i) {
 		if (i>= this.code_length) return;
 		return _readInstruction(this.arr , (this.base + 15 + (this.header.inst_size * i)), this.header);
 };
 
-LuaFunction.prototype.SetInstrution = function (i, val) {
+LuaFunction52.prototype.SetInstrution = function (i, val) {
 		if (i>= this.code_length) return;
 		//_writeInstruction(arr, (offset + 15 + (header.inst_size * i)), val, header);		
 		var t = this.base + 15 + (this.header.inst_size * i);
@@ -163,98 +156,6 @@ LuaFunction.prototype.SetInstrution = function (i, val) {
 			this.arr [t +k] = val[k];
 		}	
 };
-
-function ConstantToString(cons){
-	if (cons.type == 'nil') return 'nil';
-	return cons.value + ' //' + cons.type;
-}
-function GetOp(bytes) {
-	return bytes[0] & 0x3F;
-}
-
-function ParseUnknownInstruction(bytes) {
-	var  parsed = {};
-	parsed.OP=bytes[0] & 0x3F;
-	parsed.ToString = function() {return "";};
-	return parsed;
-}
-
-function ParseABCInstruction(bytes) {
-	var  parsed = {}
-	parsed.OP=bytes[0] & 0x3F;
-	parsed.A = ((bytes[0] & 0xC0)>>6) + ((bytes[1] & 0x3F)<<2);
-	parsed.C = ((bytes[1] & 0xC0)>>6) + ((bytes[2] & 0x7F)<<2);
-	parsed.B=((bytes[2] & 0x80)>>7) + (bytes[3] <<1);
-	parsed.ToString = function() {return "A:" + parsed.A + ", B:" + parsed.B + ", C:" + parsed.C;};
-	return parsed;
-}
-
-function ParseABInstruction(bytes) {
-	var  parsed = {};
-	parsed.OP=bytes[0] & 0x3F;
-	parsed.A = ((bytes[0] & 0xC0)>>6) + ((bytes[1] & 0x3F)<<2);
-	parsed.B = ((bytes[2] & 0x80)>>7) + (bytes[3] <<1);
-	parsed.ToString = function() {return "A:" + parsed.A + ", B:" + parsed.B;};
-	return parsed;
-}
-
-function ParseACInstruction(bytes) {
-	var  parsed = {}
-	parsed.OP=bytes[0] & 0x3F;
-	parsed.A = ((bytes[0] & 0xC0)>>6) + ((bytes[1] & 0x3F)<<2);
-	parsed.C = ((bytes[1] & 0xC0)>>6) + ((bytes[2] & 0x7F)<<2);
-	parsed.ToString = function() {return "A:" + parsed.A + ", C:" + parsed.C;};
-	return parsed;
-}
-
-
-function ParseABxInstruction(bytes) {
-	var  parsed = {};
-	parsed.OP=bytes[0] & 0x3F;
-	parsed.A = ((bytes[0] & 0xC0)>>6) + ((bytes[1] & 0x3F)<<2);
-	parsed.Bx = ((bytes[1] & 0xC0)>>6) + (bytes[2]<<2) + (bytes[3] <<10);
-	parsed.ToString = function() {return "A:" + parsed.A + ", Bx:" + parsed.Bx;};
-	return parsed;
-}
-
-function ParseAsBxInstruction(bytes) {
-	var  parsed = {};
-	parsed.OP=bytes[0] & 0x3F;
-	parsed.A = ((bytes[0] & 0xC0)>>6) + ((bytes[1] & 0x3F)<<2);
-	parsed.sBx = ((bytes[1] & 0xC0)>>6) + (bytes[2]<<2) + (bytes[3] <<10);
-	parsed.sBx -= 0x1FFFF;
-	parsed.ToString = function() {return "A:" + parsed.A + ", sBx:" + parsed.sBx;};
-	return parsed;
-}
-
-
-function ParseAxInstruction(bytes) {
-	var  parsed = {};
-	parsed.OP=bytes[0] & 0x3F;
-	parsed.Ax = ((bytes[0] & 0xC0)>>6) + (bytes[1] <<2) + (bytes[2] <<10) + (bytes[3] <<18);
-	parsed.ToString = function() {return "Ax:" + parsed.Ax;};
-	return parsed;
-}
-
-
-function ParseAInstruction(bytes) {
-	var  parsed = {};
-	parsed.OP=bytes[0] & 0x3F;
-	parsed.A=(bytes[0] & 0xC0)>>6 + (bytes[1] & 0x3F)<<2;
-	parsed.ToString = function() {return "A:" + parsed.A;};
-	return parsed;
-}
-
-function ParseInstruction(ins) {
-	//TODO: fix endianess
-	var bytes = true? 
-		[ins[0], ins[1], ins[2], ins[3]]:
-		[inst[3], ins[2], ins[1], ins[0]];
-	var parsed = GetInstructionParser(bytes);
-	parsed.name = OpToString(parsed.OP) + " - " + parsed.ToString();
-	//console.log('OpCode: ' + OpToString(parsed.OP));
-	return parsed;
-}
 
 function GetInstructionParser(bytes) {
 	var  op = bytes[0] & 0x3F;
