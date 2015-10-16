@@ -68,7 +68,7 @@ function Lua53(arr) {
 }
 
 
-unction LuaFunction53(reader, header) {
+function LuaFunction53(reader, header) {
 	//console.log('LuaFunction53, reader.offset=' + reader.offset);
 	var t;
 	var parser = new BinaryParser;
