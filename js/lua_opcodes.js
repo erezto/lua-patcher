@@ -32,12 +32,169 @@ function ParseBytecode(arr) {
 	header.magic =String.fromCharCode(arr[0]) + String.fromCharCode(arr[1])  + String.fromCharCode(arr[2]) + String.fromCharCode(arr[3]) ;
 	header.version = arr[4];
 	console.log('version: ' + arr[4]);
-	if (header.version == 82) {//version is 82 in hex --> 0x52
-		return new Lua52(arr);
+	switch(header.version) {
+		case 0x52:
+			return new Lua52(arr);
+			break;
+		case 0x53:
+			return new Lua53(arr);
+			break;
+		default:
+			console.log('Unknown version ' + parseInt(header.version , 16));
+			return null;
+	}
+}
+
+function Lua53(arr) {	
+	this.arr = arr;
+	var header = {};
+	header.magic =String.fromCharCode(arr[0]) + String.fromCharCode(arr[1])  + String.fromCharCode(arr[2]) + String.fromCharCode(arr[3]) ;
+	header.version = arr[4];
+	header.format = arr[5];
+	//data should be //"\x19\x93\r\n\x1a\n"
+	header.data = String.fromCharCode(arr[6]) + String.fromCharCode(arr[7])  + String.fromCharCode(arr[8]) + String.fromCharCode(arr[9]) +  String.fromCharCode(arr[10]) + String.fromCharCode(arr[11]) ;
+	header.int_size =  arr[12];
+	header.sizet_size =  arr[13];
+	header.inst_size =  arr[14];
+	header.integet_size =  arr[15];
+	header.luan_size =  arr[16];
+	var  t = arr.subarray(17, 17+header.integet_size);
+	header.endianess (t[0])? 1:0;
+	t = arr.subarray(17+header.integet_size, 17+header.integet_size+header.luan_size);
+	header.cl = arr[17+header.integet_size+header.luan_size];
+	this.header = header;
+	var reader = new Reader(arr, 17+header.integet_size+header.luan_size+1);
+	this.main = new LuaFunction53(reader, header);
+}
+
+
+unction LuaFunction53(reader, header) {
+	//console.log('LuaFunction53, reader.offset=' + reader.offset);
+	var t;
+	var parser = new BinaryParser;
+	this.arr = reader.arr;
+	this.base = reader.offset;
+	this.header = header;
+	t = reader.Read(1, 1)[0];
+	if (t == 0xFF) {
+		//sizet is expected to be 32b
+		t = this.arr.subarray(reader.offset, reader.offset+header.sizet_size);
+		reader.offset += header.sizet_size;
+		t = parser.fromInt(t);
+	}
+	if (t == 0x0) {
+		this,source = "";
+	}
+	else {
+		this,source = String.fromCharCode.apply(null, this.arr.subarray(reader.offset, reader.offset+t));
+		reader.offset += t;		
 	}
 	
-	console.log('Unknown version ' + parseInt(header.version , 16));
+	this.first_line = reader.Read(4, 1)[0];
+	this.last_line =  reader.Read(4, 1)[0];
+	this.num_params =  reader.Read(1, 1)[0];
+	this.is_vararg = reader.Read(1, 1)[0];
+	this.stack_size =  reader.Read(1, 1)[0];
+	this.code_length =  reader.Read(4, 1)[0];
+	this.code_base = reader.offset;
+	reader.offset += this.code_length*header.inst_size;
+	this.constants_length =  reader.Read(4, 1)[0];
+	
+	this.constants = [];
+	for (var i=0; i<this.constants_length; i++){
+		this.constants[i] = {};
+		t = reader.Read(1, 1)[0];
+		switch (t) {
+			case 0:	//LUA_TNIL
+				this.constants[i].type = 'nil';
+				break;
+			case 1:	//LUA_TBOOLEAN
+				this.constants[i].type = 'bool';
+				this.constants[i].value = reader.Read(1, 1)[0];
+				break;
+			case 3:	//LUA_TNUMFLT
+				this.constants[i].type = 'number';
+				this.constants[i].value = parser.toDouble(String.fromCharCode.apply(null, this.arr.subarray(reader.offset, reader.offset+8)));
+				reader.offset += 8;
+				break;
+			case (3+0x10):	//LUA_TNUMINT
+				this.constants[i].type = 'number';
+				this.constants[i].value = parser.toInt(String.fromCharCode.apply(null, this.arr.subarray(reader.offset, reader.offset+8)));
+				reader.offset += 8;
+				break;				
+			case 4:	//LUA_TSHRSTR
+			case (4+0x10):	//LUA_TLNGSTR
+				this.constants[i].type = 'string';
+				var str_len = reader.Read(4, 1)[0];
+				this.constants[i].value = String.fromCharCode.apply(null, this.arr.subarray(reader.offset, reader.offset+str_len));
+				reader.offset += str_len;
+				break;
+			default:
+				//Can't parse this
+				console.error('Failed parsing constant, offset ' + reader.offset);
+				return {};			
+		}		
+	}
+
+
+	
+//Upvalues
+	t= reader.Read(4, 1)[0];
+	this.upvalues = [];
+	for (var i=0; i<t; i++) {
+		this.upvalues[i] = {};
+		this.upvalues[i].name = null;
+		this.upvalues[i].instack = reader.Read(1, 1)[0];
+		this.upvalues[i].idx = reader.Read(1, 1)[0];		
+	}
+	
+//Protos
+	this.closures = [];
+	t = reader.Read(4, 1)[0];
+	for (var i=0; i<t; i++) {
+		this.closures[i] = new LuaFunction53(reader, header);
+	}
+	
+//Debug	
+	
+	t = reader.Read(4, 1)[0];
+	this.lineinfo = reader.Read(4, t);
+	t = reader.Read(4, 1)[0];
+	this.localvars = [];
+	for (var i=0; i<t; i++) {
+		this.localvars[i] = {};
+		var str_len = reader.Read(4, 1)[0];
+		this.localvars[i].varname = String.fromCharCode.apply(null, this.arr.subarray(reader.offset, reader.offset+t));
+		reader.offset += str_len;
+		this.localvars[i].startpc = reader.Read(4, 1)[0];
+		this.localvars[i].endpc = reader.Read(4, 1)[0];
+	}
+	t = reader.Read(4, 1)[0];
+	for (var i=0; i<t; i++) {		
+		var str_len = reader.Read(4, 1)[0];
+		this.upvalues[i].name = String.fromCharCode.apply(null, this.arr.subarray(reader.offset, reader.offset+t));
+		reader.offset += str_len;
+	 }
+	
+	
 }
+
+
+LuaFunction53.prototype.GetRawInstrution = function (i) {
+		if (i>= this.code_length) return;
+		return _readInstruction(this.arr , (this.base + 15 + (this.header.inst_size * i)), this.header);
+};
+
+LuaFunction53.prototype.SetInstrution = function (i, val) {
+		if (i>= this.code_length) return;
+		//_writeInstruction(arr, (offset + 15 + (header.inst_size * i)), val, header);		
+		var t = this.base + 15 + (this.header.inst_size * i);
+		//console.log('writng data ' + val + ' to offset ' + t + ',i = ' + i);
+		for (var k=0; k<this.header.inst_size; k++) {
+			this.arr [t +k] = val[k];
+		}	
+};
+
 
 function Lua52(arr) {	
 	this.arr = arr;
@@ -51,7 +208,7 @@ function Lua52(arr) {
 	header.inst_size =  arr[9];
 	header.luan_size =  arr[10];
 	header.is_luan =  arr[11];
-	header.tail =  arr.subarray(11, 18);				
+	header.tail =  arr.subarray(12, 18);				
 	this.header = header;
 	var reader = new Reader(arr, 18);
 	this.main = new LuaFunction52(reader, header);
