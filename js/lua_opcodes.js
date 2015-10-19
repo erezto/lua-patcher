@@ -59,10 +59,11 @@ function Lua53(arr) {
 	header.integet_size =  arr[15];
 	header.luan_size =  arr[16];
 	var  t = arr.subarray(17, 17+header.integet_size);
-	header.endianess (t[0])? 1:0;
+	header.endianess = (t[0])? 1:0;
 	t = arr.subarray(17+header.integet_size, 17+header.integet_size+header.luan_size);
 	header.cl = arr[17+header.integet_size+header.luan_size];
 	this.header = header;
+	console.log("int_size=" + header.int_size + ", sizet_size=" + header.sizet_size + ", inst_size=" + header.inst_size + ", integet_size=" + header.integet_size + ", luan_size=" + header.luan_size);
 	var reader = new Reader(arr, 17+header.integet_size+header.luan_size+1);
 	this.main = new LuaFunction53(reader, header);
 }
@@ -83,12 +84,15 @@ function LuaFunction53(reader, header) {
 		t = parser.fromInt(t);
 	}
 	if (t == 0x0) {
-		this,source = "";
+		this.source = "";
 	}
 	else {
-		this,source = String.fromCharCode.apply(null, this.arr.subarray(reader.offset, reader.offset+t));
+		t = t -1;
+		console.log("source name length = " + t);
+		this.source = String.fromCharCode.apply(null, this.arr.subarray(reader.offset, reader.offset+t));
 		reader.offset += t;		
 	}
+	console.log("source name: " + this.source);
 	
 	this.first_line = reader.Read(4, 1)[0];
 	this.last_line =  reader.Read(4, 1)[0];
@@ -96,14 +100,17 @@ function LuaFunction53(reader, header) {
 	this.is_vararg = reader.Read(1, 1)[0];
 	this.stack_size =  reader.Read(1, 1)[0];
 	this.code_length =  reader.Read(4, 1)[0];
+	console.log("code_length=" + this.code_length);
 	this.code_base = reader.offset;
 	reader.offset += this.code_length*header.inst_size;
 	this.constants_length =  reader.Read(4, 1)[0];
-	
+	console.log("constants_length=" + this.constants_length);
+
 	this.constants = [];
 	for (var i=0; i<this.constants_length; i++){
 		this.constants[i] = {};
 		t = reader.Read(1, 1)[0];
+		console.log(i + ", const type= " + t);
 		switch (t) {
 			case 0:	//LUA_TNIL
 				this.constants[i].type = 'nil';
@@ -125,9 +132,22 @@ function LuaFunction53(reader, header) {
 			case 4:	//LUA_TSHRSTR
 			case (4+0x10):	//LUA_TLNGSTR
 				this.constants[i].type = 'string';
-				var str_len = reader.Read(4, 1)[0];
-				this.constants[i].value = String.fromCharCode.apply(null, this.arr.subarray(reader.offset, reader.offset+str_len));
-				reader.offset += str_len;
+				var str_len = reader.Read(1, 1)[0];
+				if (str_len == 0xFF) {
+					//sizet is expected to be 32b
+					str_len = this.arr.subarray(reader.offset, reader.offset+header.sizet_size);
+					reader.offset += header.sizet_size;
+					str_len = parser.fromInt(t);
+				}
+				if (str_len != 0x0) {				
+					str_len = str_len -1;
+					this.constants[i].value = String.fromCharCode.apply(null, this.arr.subarray(reader.offset, reader.offset+str_len));
+					reader.offset += str_len;
+				}
+				else {
+					this.constants[i].value = "";
+				}
+				console.log("str_len=" + str_len);
 				break;
 			default:
 				//Can't parse this
